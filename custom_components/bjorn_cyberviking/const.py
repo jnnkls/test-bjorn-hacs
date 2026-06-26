@@ -13,12 +13,12 @@ DEFAULT_SCAN_INTERVAL = 10  # Sekunden - Bjorn rendert das e-Paper Bild relativ 
 # Bjorn schreibt dieses Bild laufend neu (siehe display.py / utils.py im Bjorn-Repo).
 SCREEN_IMAGE_PATH = "/screen.png"
 
-# Pfad zur Live-Status-Datei. ACHTUNG: Dieser Endpoint ist nicht offiziell
-# dokumentiert. Bjorn schreibt lokal eine "livestatusfile" (siehe shared.py).
-# Falls dein Bjorn diese nicht per HTTP unter diesem Pfad bereitstellt, musst
-# du den Pfad in api.py anpassen (z.B. auf einen eigenen kleinen Export, den
-# du selbst per cronjob/inotify auf den Webserver legst).
-STATUS_PATH = "/status.json"
+# Echte, im Bjorn-Quellcode (webapp.py) gefundene Endpunkte:
+# - netkb_data_json liefert die komplette "Network Knowledge Base" als JSON
+#   (eine Liste von Host-Datensätzen mit Alive-Status, Ports, Vulnerabilities, ...)
+# - list_credentials liefert die Liste der geknackten Zugangsdaten
+NETKB_PATH = "/netkb_data_json"
+CREDENTIALS_PATH = "/list_credentials"
 
 ATTR_ORCH_STATUS = "orchestrator_status"
 ATTR_LAST_SEEN = "last_seen"

@@ -14,11 +14,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import BjornCoordinator
 from .const import DOMAIN
 
-# HINWEIS: Diese Schlüssel ("status", "targets_found", ...) sind ein
-# sinnvoller Vorschlag, MÜSSEN aber ggf. an das tatsächliche JSON angepasst
-# werden, das dein Bjorn unter STATUS_PATH zurückgibt. Schau dir dazu einmal
-# `curl http://<bjorn-ip>:8000/status.json` an (oder den passenden Pfad,
-# den du in const.py eingetragen hast) und passe value_fn entsprechend an.
+# Diese Werte werden in api.py aus /netkb_data_json und /list_credentials
+# zusammengerechnet (siehe _normalize_rows / _count_vulnerabilities dort).
+# Falls deine Bjorn-Version andere Spaltennamen in der netkb verwendet,
+# musst du api.py entsprechend anpassen.
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -28,18 +27,11 @@ class BjornSensorDescription(SensorEntityDescription):
 
 SENSORS: tuple[BjornSensorDescription, ...] = (
     BjornSensorDescription(
-        key="orchestrator_status",
-        translation_key="orchestrator_status",
-        name="Status",
-        icon="mdi:robot",
-        value_fn=lambda d: d.get("status") or d.get("bjornorch_status"),
-    ),
-    BjornSensorDescription(
         key="targets_found",
         translation_key="targets_found",
         name="Gefundene Ziele",
         icon="mdi:radar",
-        value_fn=lambda d: d.get("targets_found") or d.get("alive_hosts"),
+        value_fn=lambda d: d.get("targets_found"),
     ),
     BjornSensorDescription(
         key="vulnerabilities_found",
@@ -53,14 +45,7 @@ SENSORS: tuple[BjornSensorDescription, ...] = (
         translation_key="credentials_cracked",
         name="Geknackte Zugangsdaten",
         icon="mdi:key-alert",
-        value_fn=lambda d: d.get("credentials_cracked") or d.get("cracked_pwd"),
-    ),
-    BjornSensorDescription(
-        key="files_stolen",
-        translation_key="files_stolen",
-        name="Erbeutete Dateien",
-        icon="mdi:file-download",
-        value_fn=lambda d: d.get("files_stolen") or d.get("data_stolen"),
+        value_fn=lambda d: d.get("credentials_cracked"),
     ),
     BjornSensorDescription(
         key="zombies",
@@ -105,7 +90,7 @@ class BjornSensor(CoordinatorEntity[BjornCoordinator], SensorEntity):
 
     @property
     def native_value(self) -> Any:
-        return self.entity_description.value_fn(self.coordinator.data.status or {})
+        return self.entity_description.value_fn(self.coordinator.data.stats or {})
 
     @property
     def available(self) -> bool:

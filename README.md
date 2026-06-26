@@ -14,28 +14,28 @@ Home Assistant:
 ## ⚠️ Wichtiger Hinweis zur API
 
 Bjorn selbst bietet **kein offiziell dokumentiertes JSON-API**. Diese
-Integration geht davon aus, dass unter `http://<host>:<port>/status.json`
-ein JSON mit Status-Infos liegt und unter `/screen.png` das aktuelle
-Display-Bild. Das ist eine sinnvolle Annahme basierend auf der Code-Struktur
-des Projekts (`shared.py`, `display.py`), aber **du solltest das vor der
-Installation einmal selbst gegen deine laufende Instanz testen**:
+Integration nutzt zwei tatsächlich im Bjorn-Quellcode (`webapp.py`)
+vorhandene Endpunkte:
+
+- `/netkb_data_json` – die "Network Knowledge Base" (alle Hosts mit
+  Alive-Status, offenen Ports, Schwachstellen, ...)
+- `/list_credentials` – Liste der geknackten Zugangsdaten
+- `/screen.png` – das aktuelle Bild des e-Paper-Displays
+
+Daraus werden die Sensor-Werte (gefundene Ziele, Schwachstellen,
+Zugangsdaten, Zombies) selbst zusammengezählt. **Teste vor der Installation
+einmal selbst**, ob diese Endpunkte bei dir antworten:
 
 ```bash
-curl http://<bjorn-ip>:8000/status.json
+curl http://<bjorn-ip>:8000/netkb_data_json
+curl http://<bjorn-ip>:8000/list_credentials
 curl http://<bjorn-ip>:8000/screen.png --output test.png
 ```
 
-Falls die Pfade bei dir anders heißen (z.B. weil du eine neuere/ältere
-Bjorn-Version nutzt), passe einfach `STATUS_PATH` und `SCREEN_IMAGE_PATH`
-in `const.py` an. Genauso können die JSON-Schlüssel in `sensor.py`
-(`value_fn`) abweichen – schau dir dazu einfach die Ausgabe von
-`curl .../status.json` an und passe die `.get("...")`-Aufrufe entsprechend an.
-
-Falls dein Bjorn **gar kein** JSON-Status-Endpoint hat (sehr wahrscheinlich,
-da das Projekt primär für das e-Paper-Display gebaut ist), bleibt dir die
-Kamera-Entity trotzdem – die zeigt einfach `screen.png`, das von Bjorn
-sowieso laufend aktualisiert wird, egal ob es einen Status-Endpoint gibt
-oder nicht.
+Falls die Spaltennamen in der `netkb_data_json`-Antwort bei deiner
+Bjorn-Version abweichen (z.B. weil sich das Datenmodell zwischenzeitlich
+geändert hat), passe die Auswertung in `api.py`
+(`_truthy_alive`, `_count_vulnerabilities`) entsprechend an.
 
 ## Installation über HACS (als Custom Repository)
 
@@ -55,6 +55,30 @@ Home-Assistant-Konfigurationsverzeichnis kopieren (also nach
 `/config/custom_components/bjorn_cyberviking`), dann HA neu starten und wie
 oben ab Schritt 6 weitermachen.
 
+## Update-Erkennung durch HACS
+
+Damit HACS ein Update anzeigt, reicht das Hochsetzen der `version` in
+`manifest.json` allein **nicht** – HACS orientiert sich an GitHub
+**Releases/Tags** in deinem Repo, nicht direkt am Manifest-Inhalt. Wenn du
+dieses Update in dein eigenes GitHub-Repo pushst, musst du zusätzlich einen
+neuen Tag/Release anlegen, der zur Manifest-Version passt, z.B.:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+# und auf GitHub daraus ein Release erstellen
+```
+
+Erst dann sieht HACS bei den Nutzern ein verfügbares Update.
+
+## Logo
+
+`logo.png` (für die HACS-Übersicht) und `icon.png` (Integrations-Icon)
+liegen im Repo-Root bzw. werden von HACS automatisch dort erwartet, wenn
+`render_readme` aktiv ist. Beides ist ein selbst generiertes
+Cyber-Wikinger-Logo (Helm + Schaltkreis-Motiv), kein Material aus dem
+offiziellen Bjorn-Repo – dort gibt es kein freistehendes Logo-Asset, nur
+Screenshots der e-Paper-Anzeige.
 ## Dashboard-Karte (Beispiel)
 
 ```yaml
