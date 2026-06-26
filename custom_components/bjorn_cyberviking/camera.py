@@ -25,6 +25,9 @@ class BjornScreenCamera(CoordinatorEntity[BjornCoordinator], Camera):
     _attr_has_entity_name = True
     _attr_name = "Bildschirm"
     _attr_icon = "mdi:image-area"
+    # Frontend soll das Bild im selben Takt pollen wie der Coordinator,
+    # sonst zeigt die Karte ein veraltetes Bild.
+    _attr_frame_interval = 5
 
     def __init__(self, coordinator: BjornCoordinator, entry: ConfigEntry) -> None:
         CoordinatorEntity.__init__(self, coordinator)
