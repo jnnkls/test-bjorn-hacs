@@ -1,7 +1,9 @@
 """Minimal HTTP client to talk to a Bjorn CyberViking web interface."""
 from __future__ import annotations
 
+import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,9 +15,11 @@ from .const import CREDENTIALS_PATH, NETKB_PATH, SCREEN_IMAGE_PATH
 _LOGGER = logging.getLogger(__name__)
 
 TIMEOUT = 10
-
-# Keine Caches respektieren - wir wollen immer den aktuellen Stand
 NO_CACHE_HEADERS = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
+
+# Matcht jeden <tbody>...</tbody> Block der HTML-Antwort von /list_credentials
+_TBODY_RE = re.compile(r"<tbody>(.*?)</tbody>", re.DOTALL | re.IGNORECASE)
+_TR_RE = re.compile(r"<tr>", re.IGNORECASE)
 
 
 @dataclass
@@ -31,29 +35,14 @@ class BjornApiError(Exception):
     """Raised when talking to Bjorn fails."""
 
 
-def _normalize_rows(payload: Any) -> list[dict[str, Any]]:
-    """netkb_data_json / list_credentials liefern je nach Version entweder
-    direkt eine Liste von Dicts, oder ein Wrapper-Dict mit 'data'/'netkb'."""
-    if isinstance(payload, list):
-        return payload
-    if isinstance(payload, dict):
-        for key in ("data", "netkb", "rows", "credentials"):
-            if isinstance(payload.get(key), list):
-                return payload[key]
-    return []
-
-
-def _truthy_alive(value: Any) -> bool:
-    return str(value).strip() in ("1", "1.0", "True", "true", "yes")
-
-
-def _count_vulnerabilities(row: dict[str, Any]) -> int:
-    """Die Vulnerabilities-Spalte ist meist ein String mit z.B.
-    kommagetrennten CVEs/Findings - wir zählen Einträge statt Zeichen."""
-    raw = row.get("Vulnerabilities") or row.get("vulnerabilities")
-    if not raw or str(raw).strip().lower() in ("", "none", "nan"):
-        return 0
-    return len([part for part in str(raw).split(",") if part.strip()])
+def _count_credentials(html: str) -> int:
+    """list_credentials liefert HTML-Tabellen (eine pro Dienst: ssh, ftp,
+    smb, sql, rdp, telnet). Wir zählen einfach alle <tr>-Zeilen innerhalb
+    der <tbody>-Blöcke - das sind die tatsächlich geknackten Zugangsdaten."""
+    total = 0
+    for tbody in _TBODY_RE.findall(html):
+        total += len(_TR_RE.findall(tbody))
+    return total
 
 
 class BjornApiClient:
@@ -63,7 +52,7 @@ class BjornApiClient:
         self._base_url = f"http://{host}:{port}"
         self._session = session
 
-    async def _get_json(self, path: str) -> Any:
+    async def _get_text(self, path: str) -> str | None:
         async with async_timeout.timeout(TIMEOUT):
             resp = await self._session.get(
                 f"{self._base_url}{path}", headers=NO_CACHE_HEADERS
@@ -71,36 +60,35 @@ class BjornApiClient:
             if resp.status != 200:
                 _LOGGER.debug("Bjorn %s antwortete mit HTTP %s", path, resp.status)
                 return None
-            return await resp.json(content_type=None)
+            return await resp.text()
 
     async def async_get_data(self) -> BjornData:
         """Fetch netkb + credentials + current screen image from Bjorn."""
         data = BjornData()
 
-        # 1) Network Knowledge Base -> Hosts, offene Ports, Schwachstellen
+        # 1) Network Knowledge Base -> bekannte Hosts und offene Ports
+        # Echtes Format: {"ips": [...], "ports": {ip: [...]}, "actions": [...]}
         try:
-            netkb = _normalize_rows(await self._get_json(NETKB_PATH))
-            if netkb:
+            raw = await self._get_text(NETKB_PATH)
+            if raw:
+                netkb = json.loads(raw)
                 data.online = True
-            alive_hosts = [r for r in netkb if _truthy_alive(r.get("Alive"))]
-            data.stats["targets_found"] = len(alive_hosts)
-            data.stats["vulnerabilities_found"] = sum(
-                _count_vulnerabilities(r) for r in netkb
-            )
-            data.stats["zombies"] = sum(
-                1
-                for r in netkb
-                if str(r.get("Zombie", r.get("zombie", ""))).strip()
-                in ("1", "1.0", "True", "true", "yes")
-            )
+                ips = netkb.get("ips", [])
+                ports = netkb.get("ports", {})
+                data.stats["targets_found"] = len(ips)
+                data.stats["open_ports_total"] = sum(
+                    len([p for p in plist if p]) for plist in ports.values()
+                )
         except (aiohttp.ClientError, TimeoutError) as err:
             _LOGGER.debug("Konnte Bjorn netkb_data_json nicht laden: %s", err)
+        except (ValueError, TypeError) as err:
+            _LOGGER.debug("netkb_data_json war kein gültiges JSON: %s", err)
 
-        # 2) Geknackte Zugangsdaten
+        # 2) Geknackte Zugangsdaten -> kommt als HTML, nicht als JSON!
         try:
-            creds = _normalize_rows(await self._get_json(CREDENTIALS_PATH))
-            data.stats["credentials_cracked"] = len(creds)
-            if creds:
+            html = await self._get_text(CREDENTIALS_PATH)
+            if html is not None:
+                data.stats["credentials_cracked"] = _count_credentials(html)
                 data.online = True
         except (aiohttp.ClientError, TimeoutError) as err:
             _LOGGER.debug("Konnte Bjorn list_credentials nicht laden: %s", err)

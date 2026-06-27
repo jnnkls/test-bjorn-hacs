@@ -14,10 +14,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import BjornCoordinator
 from .const import DOMAIN
 
-# Diese Werte werden in api.py aus /netkb_data_json und /list_credentials
-# zusammengerechnet (siehe _normalize_rows / _count_vulnerabilities dort).
-# Falls deine Bjorn-Version andere Spaltennamen in der netkb verwendet,
-# musst du api.py entsprechend anpassen.
+# Diese Werte kommen aus api.py:
+# - targets_found / open_ports_total: aus /netkb_data_json (Felder "ips", "ports")
+# - credentials_cracked: aus /list_credentials (HTML-Tabellen, Zeilen gezählt)
+#
+# Schwachstellen-Anzahl und Zombie-Hosts werden von Bjorn NICHT über HTTP
+# bereitgestellt (nur intern fürs e-Paper-Display berechnet) - diese Werte
+# siehst du daher nur auf dem Kamera-Bild, nicht als eigener Sensor.
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -29,16 +32,16 @@ SENSORS: tuple[BjornSensorDescription, ...] = (
     BjornSensorDescription(
         key="targets_found",
         translation_key="targets_found",
-        name="Gefundene Ziele",
+        name="Bekannte Ziele",
         icon="mdi:radar",
         value_fn=lambda d: d.get("targets_found"),
     ),
     BjornSensorDescription(
-        key="vulnerabilities_found",
-        translation_key="vulnerabilities_found",
-        name="Gefundene Schwachstellen",
-        icon="mdi:shield-alert",
-        value_fn=lambda d: d.get("vulnerabilities_found"),
+        key="open_ports_total",
+        translation_key="open_ports_total",
+        name="Offene Ports (gesamt)",
+        icon="mdi:network-outline",
+        value_fn=lambda d: d.get("open_ports_total"),
     ),
     BjornSensorDescription(
         key="credentials_cracked",
@@ -46,13 +49,6 @@ SENSORS: tuple[BjornSensorDescription, ...] = (
         name="Geknackte Zugangsdaten",
         icon="mdi:key-alert",
         value_fn=lambda d: d.get("credentials_cracked"),
-    ),
-    BjornSensorDescription(
-        key="zombies",
-        translation_key="zombies",
-        name="Zombie-Hosts",
-        icon="mdi:skull",
-        value_fn=lambda d: d.get("zombies"),
     ),
 )
 
